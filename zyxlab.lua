@@ -2409,13 +2409,14 @@ return function()
     local orbitAngle = 0
     local flyVelocity, flyGyro
     local controls
-
-    local wallhopRaycastParams = RaycastParams.new()
-    wallhopRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-
-    pcall(function()
-        controls = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")):GetControls()
-    end)
+    local function getControls()
+        if controls then return controls end
+        local ok, result = pcall(function()
+            return require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")):GetControls()
+        end)
+        if ok then controls = result end
+        return controls
+    end
 
     local function getJumpValue()
         if not humanoid then return 50 end
@@ -2583,11 +2584,12 @@ return function()
     end)
 
     UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
+        if processed or not input.UserInputType == Enum.UserInputType.Keyboard then return end
         keys[input.KeyCode] = true
     end)
 
     UserInputService.InputEnded:Connect(function(input)
+        if not input.UserInputType == Enum.UserInputType.Keyboard then return end
         keys[input.KeyCode] = false
     end)
 
@@ -2624,8 +2626,9 @@ return function()
                 if not flyVelocity or not flyVelocity.Parent then startFly() end
                 if root and flyVelocity and flyGyro and camera then
                     local move = Vector3.zero
-                    if controls then
-                        local moveVector = controls:GetMoveVector()
+                    local ctrl = getControls()
+                    if ctrl then
+                        local moveVector = ctrl:GetMoveVector()
                         move += camera.CFrame.RightVector * moveVector.X
                         move += camera.CFrame.LookVector * -moveVector.Z
                     end
@@ -5815,7 +5818,12 @@ end
 
 local function setSmOpenExits(state)
     smOpenExitsOn = state
-    if not state then return end
+    if not state then
+        if smOpenExitsThread then
+            smOpenExitsThread = nil
+        end
+        return
+    end
     if smOpenExitsThread then return end
     smOpenExitsThread = task.spawn(function()
         while smOpenExitsOn do
