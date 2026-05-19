@@ -5942,7 +5942,7 @@ funPage:Toggle({
     Desc  = "Auto-fires hack input while you are typing at a computer",
     Value = false,
     Callback = function(v)
-        setSmRemoteHack(v)
+        pcall(function() setSmRemoteHack(v) end)
     end,
 })
 
@@ -5951,7 +5951,7 @@ funPage:Toggle({
     Desc  = "Continuously fires all closed Exit Doors open every 2 seconds",
     Value = false,
     Callback = function(v)
-        setSmOpenExits(v)
+        pcall(function() setSmOpenExits(v) end)
     end,
 })
 
