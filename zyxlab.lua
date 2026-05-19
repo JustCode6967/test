@@ -2357,12 +2357,11 @@ end
 -- lazy loadstring chunk so this large ZyxLab file does not hit Lua's 200-local limit.
 _G.__ZyxMovementModuleSource = [====[
 return function()
-    -- duplicate service local removed
-    -- duplicate service local removed
+    local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
     local Workspace = game:GetService("Workspace")
 
-    local player = Players.LocalPlayer or game:GetService("Players").PlayerAdded:Wait()
+    local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
     local camera = Workspace.CurrentCamera
 
     local walkspeeddefault = 16
