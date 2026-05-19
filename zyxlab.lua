@@ -2360,6 +2360,7 @@ return function()
     local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
     local Workspace = game:GetService("Workspace")
+    local RunService = game:GetService("RunService")
 
     local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
     local camera = Workspace.CurrentCamera
