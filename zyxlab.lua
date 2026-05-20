@@ -4561,6 +4561,99 @@ toggleHandles.beastnotify = miscPage:Toggle({
     Callback = function(v) state.beastnotify = v end,
 })
 
+-- ─── BEAST PREDICTOR ───
+do
+    local predictorEnabled = false
+    local predictorThread = nil
+    local lastPredicted = nil
+    local lastCurrentBeast = nil
+
+    local function getBeastPrediction()
+        local currentBeast = nil
+        local predictedBeast = nil
+        local highestChance = -math.huge
+
+        for _, p in pairs(Players:GetPlayers()) do
+            local tempStats = p:FindFirstChild("TempPlayerStatsModule")
+            local isBeast = tempStats and tempStats:FindFirstChild("IsBeast")
+
+            local savedStats = p:FindFirstChild("SavedPlayerStatsModule")
+            local beastChance = savedStats and savedStats:FindFirstChild("BeastChance")
+            local chance = beastChance and tonumber(beastChance.Value) or 0
+
+            if isBeast and isBeast.Value == true then
+                currentBeast = p.Name
+            else
+                if chance > highestChance then
+                    highestChance = chance
+                    predictedBeast = p.Name
+                end
+            end
+        end
+
+        return currentBeast, predictedBeast, highestChance
+    end
+
+    local function showPrediction(force)
+        local currentBeast, predictedBeast, highestChance = getBeastPrediction()
+
+        if not predictedBeast then
+            if force then
+                Library:Notify("Beast Predictor: Could not predict next Beast yet.")
+            end
+            return
+        end
+
+        local changed = predictedBeast ~= lastPredicted or currentBeast ~= lastCurrentBeast
+
+        if force or changed then
+            lastPredicted = predictedBeast
+            lastCurrentBeast = currentBeast
+
+            local currentText = currentBeast or "Not selected yet"
+
+            Library:Notify("Beast Predictor\nCurrent: " .. currentText ..
+                "\nNext: " .. predictedBeast .. " (" .. tostring(highestChance) .. "%)")
+        end
+    end
+
+    toggleHandles.beastpredictor = miscPage:Toggle({
+        Title = "Beast Predictor",
+        Desc  = "Predict the next Beast based on chance %",
+        Value = false,
+        Callback = function(v)
+            predictorEnabled = v
+
+            if v then
+                showPrediction(true)
+
+                if predictorThread then
+                    task.cancel(predictorThread)
+                    predictorThread = nil
+                end
+
+                predictorThread = task.spawn(function()
+                    while predictorEnabled do
+                        pcall(function()
+                            showPrediction(false)
+                        end)
+                        task.wait(3)
+                    end
+                end)
+            else
+                if predictorThread then
+                    task.cancel(predictorThread)
+                    predictorThread = nil
+                end
+
+                lastPredicted = nil
+                lastCurrentBeast = nil
+                Library:Notify("Beast Predictor: Disabled")
+            end
+        end,
+    })
+end
+
 -- ─── ANTI AFK ───
 -- Uses Roblox VirtualUser only while the toggle is enabled.  Stored on _G so
 -- this tiny feature does not add persistent top-level locals to the large main chunk.
@@ -4598,8 +4691,68 @@ toggleHandles.antiafk = miscPage:Toggle({
     end,
 })
 
--- ─── AUTO INTERACT ───
+-- ─── PC CRAWL ACTIVATION ───
 do
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+    local Player = Players.LocalPlayer
+    local Character = Player.Character or Player.CharacterAdded:Wait()
+    local Humanoid = Character:WaitForChild("Humanoid")
+    local CrawlAnimation = ReplicatedStorage:WaitForChild("Animations"):WaitForChild("AnimCrawl")
+    local CrawlTrack = Humanoid:LoadAnimation(CrawlAnimation)
+
+    local function activateCrawl()
+        pcall(function()
+            if Character and Humanoid then
+                Humanoid.HipHeight = -2
+                Humanoid.WalkSpeed = 8
+                if not CrawlTrack.IsPlaying then
+                    CrawlTrack:Play(0.1, 1, 1)
+                end
+                Library:Notify("PC Crawl: Activated")
+            end
+        end)
+    end
+
+    local function stopCrawl()
+        pcall(function()
+            if Character and Humanoid then
+                Humanoid.HipHeight = 0
+                Humanoid.WalkSpeed = 16
+                if CrawlTrack.IsPlaying then
+                    CrawlTrack:Stop(0.1)
+                end
+                Library:Notify("PC Crawl: Stopped")
+            end
+        end)
+    end
+
+    Player.CharacterAdded:Connect(function(NewChar)
+        Character = NewChar
+        Humanoid = Character:WaitForChild("Humanoid")
+        CrawlTrack = Humanoid:LoadAnimation(CrawlAnimation)
+        stopCrawl()
+    end)
+
+    miscPage:Button({
+        Title = "Activate PC Crawl",
+        Desc  = "Start crawling (one-time click)",
+        Callback = function()
+            activateCrawl()
+        end,
+    })
+
+    miscPage:Button({
+        Title = "Stop PC Crawl",
+        Desc  = "Return to normal stance",
+        Callback = function()
+            stopCrawl()
+        end,
+    })
+end
+
+-- ─── AUTO INTERACT ───
     -- Persists across toggle cycles; declared here so start/stop share state.
     local Remote = ReplicatedStorage:WaitForChild("RemoteEvent")
 
@@ -10472,6 +10625,9 @@ local function setupFeatureSearch(pageRegistry)
         {page = "Misc", feature = "Anti-Error"},
         {page = "Misc", feature = "No Slow"},
         {page = "Misc", feature = "Beast Notifier"},
+        {page = "Misc", feature = "Beast Predictor"},
+        {page = "Misc", feature = "Activate PC Crawl"},
+        {page = "Misc", feature = "Stop PC Crawl"},
         {page = "Misc", feature = "Anti AFK"},
         {page = "Misc", feature = "Streamer Mode"},
         {page = "Misc", feature = "No Hammer Cooldown"},
