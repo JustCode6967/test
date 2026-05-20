@@ -4599,7 +4599,7 @@ do
 
         if not predictedBeast then
             if force then
-                Library:Notify("Beast Predictor: Could not predict next Beast yet.")
+                print("Beast Predictor: Could not predict next Beast yet.")
             end
             return
         end
@@ -4612,8 +4612,8 @@ do
 
             local currentText = currentBeast or "Not selected yet"
 
-            Library:Notify("Beast Predictor\nCurrent: " .. currentText ..
-                "\nNext: " .. predictedBeast .. " (" .. tostring(highestChance) .. "%)")
+            print("Beast Predictor - Current: " .. currentText ..
+                " | Next: " .. predictedBeast .. " (" .. tostring(highestChance) .. "%)")
         end
     end
 
@@ -4648,7 +4648,7 @@ do
 
                 lastPredicted = nil
                 lastCurrentBeast = nil
-                Library:Notify("Beast Predictor: Disabled")
+                print("Beast Predictor: Disabled")
             end
         end,
     })
@@ -4693,46 +4693,55 @@ toggleHandles.antiafk = miscPage:Toggle({
 
 -- ─── PC CRAWL ACTIVATION ───
 do
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
     local Player = Players.LocalPlayer
-    local Character = Player.Character or Player.CharacterAdded:Wait()
-    local Humanoid = Character:WaitForChild("Humanoid")
-    local CrawlAnimation = ReplicatedStorage:WaitForChild("Animations"):WaitForChild("AnimCrawl")
-    local CrawlTrack = Humanoid:LoadAnimation(CrawlAnimation)
+    local Character = Player.Character
+    local Humanoid = Character and Character:FindFirstChild("Humanoid")
+    local CrawlAnimation = ReplicatedStorage:FindFirstChild("Animations")
+    local CrawlTrack = nil
+
+    if CrawlAnimation then
+        CrawlAnimation = CrawlAnimation:FindFirstChild("AnimCrawl")
+        if CrawlAnimation and Humanoid then
+            CrawlTrack = Humanoid:LoadAnimation(CrawlAnimation)
+        end
+    end
 
     local function activateCrawl()
         pcall(function()
-            if Character and Humanoid then
+            if Character and Humanoid and CrawlTrack then
                 Humanoid.HipHeight = -2
                 Humanoid.WalkSpeed = 8
                 if not CrawlTrack.IsPlaying then
                     CrawlTrack:Play(0.1, 1, 1)
                 end
-                Library:Notify("PC Crawl: Activated")
+                print("PC Crawl: Activated")
             end
         end)
     end
 
     local function stopCrawl()
         pcall(function()
-            if Character and Humanoid then
+            if Character and Humanoid and CrawlTrack then
                 Humanoid.HipHeight = 0
                 Humanoid.WalkSpeed = 16
                 if CrawlTrack.IsPlaying then
                     CrawlTrack:Stop(0.1)
                 end
-                Library:Notify("PC Crawl: Stopped")
+                print("PC Crawl: Stopped")
             end
         end)
     end
 
-    Player.CharacterAdded:Connect(function(NewChar)
+    Players.LocalPlayer.CharacterAdded:Connect(function(NewChar)
         Character = NewChar
         Humanoid = Character:WaitForChild("Humanoid")
-        CrawlTrack = Humanoid:LoadAnimation(CrawlAnimation)
-        stopCrawl()
+        local CrawlAnim = ReplicatedStorage:FindFirstChild("Animations")
+        if CrawlAnim then
+            CrawlAnim = CrawlAnim:FindFirstChild("AnimCrawl")
+            if CrawlAnim then
+                CrawlTrack = Humanoid:LoadAnimation(CrawlAnim)
+            end
+        end
     end)
 
     miscPage:Button({
