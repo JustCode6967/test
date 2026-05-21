@@ -948,8 +948,8 @@ local antiSeer = {
     token = 0,
 }
 
-local ANTI_SEER_ACTIVATE_DELAY = 2.75
-local ANTI_SEER_HIDE_TIME = 0.6
+local ANTI_SEER_ACTIVATE_DELAY = 2.1
+local ANTI_SEER_HIDE_TIME = 9
 
 local function antiSeerGetHRP()
     local char = player.Character
