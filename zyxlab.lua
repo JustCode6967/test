@@ -6983,9 +6983,9 @@ do
                         for _, v in pairs(char:GetChildren()) do
                             if v:IsA("BasePart") then v.Massless = true end
                         end
-                        local jitter = Vector3.new(math.sin(tick()*100)/100, 0, math.cos(tick()*100)/100)
+                        local jitter = Vector3.new(math.sin(tick()*100000000)/100000000, 0, math.cos(tick()*100000000)/100000000)
                         pcall(function()
-                            hrp.CFrame = (bHrp.CFrame + jitter) * CFrame.Angles(0, math.rad(tick()*100000 % 360), 0)
+                            hrp.CFrame = (bHrp.CFrame + jitter) * CFrame.Angles(0, math.rad(tick()*1000000000000 % 360), 0)
                             local NaN    = 0/0
                             local nanVec = Vector3.new(NaN, NaN, NaN)
                             hrp.Velocity    = nanVec
