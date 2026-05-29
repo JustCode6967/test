@@ -553,6 +553,7 @@ local applyPlayerHighlight, clearPlayerESP
 local applyDoorESP, clearDoorESP
 local applyExitESP, clearExitESP, clearComputerESP
 local applyFreezeESP, clearFreezeESP
+local refreshProgressESP
 
 -- SOUNDPACK
 local refreshSoundpack
@@ -731,6 +732,8 @@ DEFAULT_STATE = {
     autotie = false,
     forcebeastability = false,
     slowbeast = false,
+    proximityslow = false,
+    proximityslowdistance = 12,
     removerope = false,
     autosavecaptured = false,
     -- Features added to config system
@@ -840,6 +843,7 @@ state = {
     streamermode = false, nohammercooldown = false,
     silenthack   = false, autotie = false, hitaura = false, hitaurarange = 20,
     forcebeastability = false, slowbeast = false,
+    proximityslow = false, proximityslowdistance = 12,
     removerope   = false,
     autosavecaptured = false,
     -- Features added to config system
@@ -2049,7 +2053,17 @@ do  -- 🔒 PROGRESS_BAR section (scopes internal locals)
         end
     end
 
-    local function startLoop_pb()
+    local startLoop_pb
+
+    function refreshProgressESP()
+        if not state.progressbar then return end
+        clearESP_pb()
+        task.wait(0.15)
+        buildESP_pb()
+        if startLoop_pb then startLoop_pb() end
+    end
+
+    function startLoop_pb()
         if computerProgressLoop then task.cancel(computerProgressLoop); computerProgressLoop = nil end
         computerProgressLoop = task.spawn(function()
             while state.progressbar do
@@ -2073,21 +2087,26 @@ do  -- 🔒 PROGRESS_BAR section (scopes internal locals)
     end
 
     -- hooked by the existing visualsPage "Progress Bar" toggle via state.progressbar
-    -- Auto-refresh: watch for state changes AND map changes in a lightweight loop
+    -- Auto-refresh: watch toggle changes, map changes, and ReplicatedStorage.IsGameActive.
     task.spawn(function()
         local last = false
         local lastMapName = ""
+        local lastActive = nil
         while true do
             task.wait(0.25)
             local cur = state.progressbar == true
-            -- Detect map change for auto-rebuild
             local currentMapName = ""
+            local isActive = false
             pcall(function()
-                local cm = game.ReplicatedStorage:FindFirstChild("CurrentMap")
+                local cm = ReplicatedStorage:FindFirstChild("CurrentMap")
                 if cm then currentMapName = tostring(cm.Value) end
+                local activeFlag = ReplicatedStorage:FindFirstChild("IsGameActive")
+                isActive = activeFlag and activeFlag:IsA("BoolValue") and activeFlag.Value == true
             end)
             local mapChanged = (currentMapName ~= lastMapName and currentMapName ~= "")
+            local activeBecameTrue = (isActive == true and lastActive ~= true)
             if mapChanged then lastMapName = currentMapName end
+            lastActive = isActive
 
             if cur ~= last then
                 last = cur
@@ -2098,12 +2117,9 @@ do  -- 🔒 PROGRESS_BAR section (scopes internal locals)
                     clearESP_pb()
                     if computerProgressLoop then task.cancel(computerProgressLoop); computerProgressLoop = nil end
                 end
-            elseif cur and mapChanged then
-                -- Auto-rebuild on map change — no manual refresh needed
-                clearESP_pb()
-                task.wait(0.5) -- small delay for map to fully load
-                buildESP_pb()
-                startLoop_pb()
+            elseif cur and (mapChanged or activeBecameTrue) then
+                task.wait(0.5)
+                refreshProgressESP()
             end
         end
     end)
@@ -3557,7 +3573,7 @@ end
 local Olympia = (function()
     local O = {}
     local streamerConnection, streamerLevelBackup, noHammerConnection
-    local silentHackThread, autoTieThread, slowBeastThread, forceAbilityThread, removeRopeThread
+    local silentHackThread, autoTieThread, slowBeastThread, proximitySlowThread, forceAbilityThread, removeRopeThread
     local silentHackConnections = {}
     local noHammerSpeed = 100
     local streamerName  = tostring(theme.streamerName  or "Sigma")
@@ -3850,6 +3866,42 @@ local Olympia = (function()
         end)
     end
 
+    function O.stopProximitySlow() state.proximityslow = false end
+    function O.startProximitySlow()
+        if proximitySlowThread then return end
+        proximitySlowThread = task.spawn(function()
+            while state.proximityslow do
+                task.wait(0.1)
+                pcall(function()
+                    local char = player.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    if not root or not hum then return end
+
+                    local ragdolled = false
+                    local stats = player:FindFirstChild("TempPlayerStatsModule")
+                    local rag = stats and stats:FindFirstChild("Ragdoll")
+                    if rag and rag.Value == true then ragdolled = true end
+                    local hstate = hum:GetState()
+                    if hstate == Enum.HumanoidStateType.Ragdoll or hstate == Enum.HumanoidStateType.FallingDown then ragdolled = true end
+                    if ragdolled then return end
+
+                    local maxDist = tonumber(state.proximityslowdistance) or 12
+                    for _, plr in pairs(game:GetService("Players"):GetPlayers()) do
+                        if plr ~= player and plr.Character then
+                            local beastRoot = plr.Character:FindFirstChild("HumanoidRootPart")
+                            local event = powersEvent(plr)
+                            if beastRoot and event and (root.Position - beastRoot.Position).Magnitude <= maxDist then
+                                event:FireServer("Jumped")
+                            end
+                        end
+                    end
+                end)
+            end
+            proximitySlowThread = nil
+        end)
+    end
+
     function O.stopForceBeastAbility() state.forcebeastability = false end
     function O.startForceBeastAbility()
         if forceAbilityThread then return end
@@ -3901,6 +3953,7 @@ local Olympia = (function()
         if state.silenthack then O.startSilentHack() else O.stopSilentHack() end
         if state.autotie then O.startAutoTie() else O.stopAutoTie() end
         if state.slowbeast then O.startSlowBeast() else O.stopSlowBeast() end
+        if state.proximityslow then O.startProximitySlow() else O.stopProximitySlow() end
         if state.forcebeastability then O.startForceBeastAbility() else O.stopForceBeastAbility() end
         if state.removerope then O.startRemoveRope() else O.stopRemoveRope() end
     end
@@ -5213,7 +5266,8 @@ visualsPage:Button({
         if state.exitESP      then clearExitESP();      applyExitESP()      end
         if state.freezepodESP then clearFreezeESP();    applyFreezeESP()    end
         if state.computerESP  then clearComputerESP()                       end
-        refreshAllESPs()
+        if state.progressbar and refreshProgressESP then refreshProgressESP() end
+        for _, fn in ipairs(espRefreshFns) do pcall(fn) end
         Library:Notification({
             Title    = "ESP Refreshed",
             Desc     = "All active ESP highlights have been reapplied.",
@@ -5231,6 +5285,32 @@ toggleHandles.progressbar = visualsPage:Toggle({
     Value = state.progressbar,
     Callback = function(v) state.progressbar = v end,
 })
+
+-- Auto-refresh active ESPs when the game becomes active. Progress ESP is included by default.
+task.spawn(function()
+    local lastActive = nil
+    while true do
+        task.wait(0.5)
+        local isActive = false
+        pcall(function()
+            local activeFlag = ReplicatedStorage:FindFirstChild("IsGameActive")
+            isActive = activeFlag and activeFlag:IsA("BoolValue") and activeFlag.Value == true
+        end)
+        if isActive and lastActive ~= true then
+            if state.playerESP then
+                clearPlayerESP()
+                for _, p in pairs(game:GetService("Players"):GetPlayers()) do applyPlayerHighlight(p) end
+            end
+            if state.doorESP      then clearDoorESP();      applyDoorESP()      end
+            if state.exitESP      then clearExitESP();      applyExitESP()      end
+            if state.freezepodESP then clearFreezeESP();    applyFreezeESP()    end
+            if state.computerESP  then clearComputerESP()                       end
+            if state.progressbar and refreshProgressESP then refreshProgressESP() end
+            for _, fn in ipairs(espRefreshFns) do pcall(fn) end
+        end
+        lastActive = isActive
+    end
+end)
 
 toggleHandles.fullbright = visualsPage:Toggle({
     Title = "Fullbright",
@@ -6647,6 +6727,27 @@ toggleHandles.slowbeast = ragePage:Toggle({
     Callback = function(v)
         state.slowbeast = v
         if v then Olympia.startSlowBeast() else Olympia.stopSlowBeast() end
+    end,
+})
+
+toggleHandles.proximityslow = ragePage:Toggle({
+    Title = "Proximity Slow Beast",
+    Desc  = "Only fires Beast jump power when Beast is nearby",
+    Value = state.proximityslow,
+    Callback = function(v)
+        state.proximityslow = v
+        if v then Olympia.startProximitySlow() else Olympia.stopProximitySlow() end
+    end,
+})
+
+ragePage:Slider({
+    Title    = "Proximity Slow Distance",
+    Min      = 0,
+    Max      = 30,
+    Rounding = 0,
+    Value    = state.proximityslowdistance,
+    Callback = function(v)
+        state.proximityslowdistance = v
     end,
 })
 
